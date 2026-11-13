@@ -1,0 +1,10 @@
+BEGIN IMMEDIATE;
+CREATE TABLE daily_notes (
+    date TEXT PRIMARY KEY,
+    body TEXT NOT NULL DEFAULT '',
+    version INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+PRAGMA user_version=2;
+COMMIT;

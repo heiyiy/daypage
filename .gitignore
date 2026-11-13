@@ -1,0 +1,33 @@
+# Local reports and planning notes
+/环境检查.md
+/计划.md
+
+# Local tools and application binaries
+/.github-tools/
+*.exe
+*.msi
+*.msix
+
+# Private application data and backups
+*.sqlite
+*.sqlite3
+*.db
+*.sqlite*
+*.db-wal
+*.db-shm
+**/备份/
+**/backups/
+**/test-data/
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+
+# Generated code, dependencies and test artifacts
+**/node_modules/
+**/target/
+**/dist/
+**/.build-reference/
+/daypage/verification/*
+!/daypage/verification/验收记录.md
+*.log

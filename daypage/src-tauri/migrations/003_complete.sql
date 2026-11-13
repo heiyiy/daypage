@@ -1,0 +1,10 @@
+BEGIN IMMEDIATE;
+ALTER TABLE task_days ADD COLUMN reflection TEXT NOT NULL DEFAULT '';
+CREATE TABLE undo_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL,
+    changes TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+PRAGMA user_version=3;
+COMMIT;
