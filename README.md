@@ -33,4 +33,3 @@ npm.cmd run tauri build -- --bundles nsis
 
 详细操作、备份及验收说明见 [使用说明](daypage/README.md) 和 [验收记录](daypage/verification/验收记录.md)。
 
-仓库只包含源代码和文档，不包含个人待办、日记、备份、本地环境报告或构建产物。
