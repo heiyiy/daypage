@@ -116,11 +116,7 @@ function cleanup(){
     initialTheme=await widget.locator('#widget-theme').inputValue();initialOpacity=await opacity();
     assert.equal(browser.contexts()[0].pages().length,1);
     assert.equal(await widget.evaluate(()=>getComputedStyle(document.body).backgroundColor),'rgba(0, 0, 0, 0)');
-    const pinned=await widget.locator('#pin').getAttribute('aria-pressed');
-    await widget.locator('#pin').click();
-    await widget.waitForFunction(value=>document.querySelector('#pin').getAttribute('aria-pressed')!==value,pinned);
-    await widget.locator('#pin').click();
-    await widget.waitForFunction(value=>document.querySelector('#pin').getAttribute('aria-pressed')===value,pinned);
+    assert.equal(await widget.locator('#pin').count(),0);
     await widget.locator('#task-input').fill(title);await widget.locator('#task-input').press('Enter');
     const row=widget.locator('li').filter({hasText:title});await row.waitFor();
     for(const theme of ['original','light','dark']){

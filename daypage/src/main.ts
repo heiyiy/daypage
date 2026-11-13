@@ -15,7 +15,7 @@ const taskMarkup = `<details id="backlog" hidden><summary>此前未完成 <span 
   <footer><span id="save-status" role="status" aria-live="polite">读取中…</span><button id="retry" type="button" hidden>重试</button><button id="undo" type="button" disabled>撤销</button><span id="progress"></span></footer><p id="backup-warning" class="error" hidden></p>`;
 $("app").innerHTML = isJournal ? journalShell(taskMarkup) : `<section class="widget-panel">
   <header class="widget-header"><div class="drag-handle" data-tauri-drag-region><strong data-tauri-drag-region>待办</strong><span id="date-label" data-tauri-drag-region></span></div>
-  <nav><button id="pin" title="置顶" aria-label="置顶" aria-pressed="false">钉</button><select id="widget-theme" aria-label="待办配色" title="待办配色"><option value="original">原色</option><option value="light">白底黑字</option><option value="dark">黑底白字</option></select><button id="opacity" title="切换透明度" aria-label="切换透明度">◐</button><button id="open-journal" title="日记 / 日历">日历</button><button id="hide" title="隐藏到托盘" aria-label="隐藏到托盘">×</button></nav></header>
+  <nav><select id="widget-theme" aria-label="待办配色" title="待办配色"><option value="original">原色</option><option value="light">白底黑字</option><option value="dark">黑底白字</option></select><button id="opacity" title="切换透明度" aria-label="切换透明度">◐</button><button id="open-journal" title="日记 / 日历">日历</button><button id="hide" title="隐藏到托盘" aria-label="隐藏到托盘">×</button></nav></header>
   <div class="task-area">${taskMarkup}</div><p id="day-notice" hidden>日期已变更 <button id="go-today">回到今天</button></p></section>`;
 const input = $<HTMLInputElement>("task-input");
 const add = $<HTMLButtonElement>("add-button");
@@ -280,20 +280,8 @@ async function init() {
     showDate();
     await load();
     const window = getCurrentWindow();
-    $("hide").addEventListener("click", () => { void window.hide().catch(fail); });
+    $("hide").addEventListener("click", () => { void invoke("hide_widget").catch(fail); });
     $("open-journal").addEventListener("click", () => { void invoke("open_journal").catch(fail); });
-    let pinned = (await invoke<{ pinned: boolean }>("get_widget_settings")).pinned;
-    const pin = $<HTMLButtonElement>("pin");
-    pin.setAttribute("aria-pressed", String(pinned));
-    pin.addEventListener("click", async () => {
-      pin.disabled = true;
-      try {
-        await invoke("set_widget_pinned", { pinned: !pinned });
-        pinned = !pinned;
-        pin.setAttribute("aria-pressed", String(pinned));
-      } catch (error) { fail(error); }
-      finally { pin.disabled = false; }
-    });
     // These are display preferences only; task data lives in SQLite.
     const theme = $<HTMLSelectElement>("widget-theme");
     const storedTheme = localStorage.getItem("widget-theme");
@@ -311,7 +299,7 @@ async function init() {
       opacity = (opacity + 1) % 3; applyOpacity(); localStorage.setItem("widget-opacity", String(opacity));
     });
     $("go-today").addEventListener("click", () => { void selectDate(localDate(), true).catch(fail); });
-    await window.onCloseRequested(async event => { event.preventDefault(); await window.hide(); });
+    await window.onCloseRequested(async event => { event.preventDefault(); await invoke("hide_widget"); });
   }
 }
 window.addEventListener("focus", showDate);

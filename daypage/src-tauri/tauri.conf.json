@@ -14,6 +14,8 @@
     "windows": [
       {
         "label": "main",
+        "visible": false,
+        "focus": false,
         "title": "日页 · 待办",
         "width": 340,
         "height": 430,

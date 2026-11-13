@@ -1,4 +1,5 @@
 mod db;
+mod desktop;
 mod geometry;
 mod maintenance;
 mod storage;
@@ -126,32 +127,14 @@ async fn get_month(
     access(&state, move |conn| db::get_month(conn, year, month)).await
 }
 #[tauri::command]
-async fn get_widget_settings(
-    state: tauri::State<'_, Database>,
-) -> Result<serde_json::Value, String> {
-    access(&state,|conn|Ok(serde_json::json!({"pinned":db::get_setting(conn,"widget_pinned")?.as_deref()==Some("true")}))).await
-}
-#[tauri::command]
-async fn set_widget_pinned(
-    pinned: bool,
-    state: tauri::State<'_, Database>,
-    app: tauri::AppHandle,
-) -> Result<(), String> {
-    let window = app.get_webview_window("main").ok_or("找不到待办窗口")?;
-    window
-        .set_always_on_top(pinned)
-        .map_err(|e| e.to_string())?;
-    if let Err(error) = access(&state, move |conn| {
-        db::set_setting(conn, "widget_pinned", if pinned { "true" } else { "false" })
-    })
-    .await
-    {
-        let _ = window.set_always_on_top(!pinned);
-        return Err(error);
-    }
-    Ok(())
+fn hide_widget(app: tauri::AppHandle) {
+    desktop::set_hidden(&app, true);
 }
 fn show(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
+    if label == "main" {
+        desktop::set_hidden(app, false);
+        return Ok(());
+    }
     let window = if let Some(window) = app.get_webview_window(label) {
         window
     } else if label == "journal" {
@@ -193,6 +176,7 @@ async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(maintenance::DataGate::default())
+        .manage(desktop::Desktop::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             let _ = show(app, "main");
@@ -203,11 +187,6 @@ pub fn run() {
                 .unwrap_or(app.path().app_data_dir()?);
             std::fs::create_dir_all(&directory)?;
             let conn = db::open(&directory.join("daypage.sqlite3"))?;
-            if db::get_setting(&conn, "widget_pinned")?.as_deref() == Some("true") {
-                if let Some(window) = app.get_webview_window("main") {
-                    window.set_always_on_top(true)?;
-                }
-            }
             maintenance::refresh_backup(&conn);
             app.manage(Database(Arc::new(Mutex::new(conn))));
             app.manage(geometry::Geometry::open(
@@ -258,6 +237,7 @@ pub fn run() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
+            desktop::start(app.handle())?;
             Ok(())
         })
         .on_window_event(geometry::event)
@@ -279,8 +259,7 @@ pub fn run() {
             get_note,
             save_note,
             get_month,
-            get_widget_settings,
-            set_widget_pinned,
+            hide_widget,
             open_journal,
             show_widget,
             quit_app
