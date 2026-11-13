@@ -1,5 +1,7 @@
 # 日页 · Daypage
 
+A lightweight software for creating to-do lists and summarizing daily reflections
+
 简洁的 Windows 本地待办、事项反思与日记工具。透明桌面小组件用于记录待办，独立月历用于翻看每天的安排与日记。数据保存在本机，日常使用无需联网。
 
 ## 功能
