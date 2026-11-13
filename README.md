@@ -6,17 +6,19 @@
 
 ## 下载
 
-**[下载最新版本](https://github.com/heiyiy/daypage/releases/latest)** · 当前版本 **v0.2.0** · Windows x64
+**[下载最新版本](https://github.com/heiyiy/daypage/releases/latest)** · 当前版本 **v0.2.1** · Windows x64
 
 | 文件 | 适合谁 | 下载 |
 | --- | --- | --- |
-| 安装版 | 日常使用，安装后从开始菜单打开 | [下载安装包](https://github.com/heiyiy/daypage/releases/download/v0.2.0/Daypage-0.2.0-windows-x64-setup.exe) |
-| 便携版 | 不想安装，双击即可运行 | [下载 exe](https://github.com/heiyiy/daypage/releases/download/v0.2.0/Daypage-0.2.0-windows-x64.exe) |
-| 校验文件 | 核对下载文件的 SHA256 | [SHA256SUMS.txt](https://github.com/heiyiy/daypage/releases/download/v0.2.0/SHA256SUMS.txt) |
+| 安装版 | 日常使用，安装后从开始菜单打开 | [下载安装包](https://github.com/heiyiy/daypage/releases/download/v0.2.1/Daypage-0.2.1-windows-x64-setup.exe) |
+| 便携版 | 不想安装，双击即可运行 | [下载 exe](https://github.com/heiyiy/daypage/releases/download/v0.2.1/Daypage-0.2.1-windows-x64.exe) |
+| 校验文件 | 核对下载文件的 SHA256 | [SHA256SUMS.txt](https://github.com/heiyiy/daypage/releases/download/v0.2.1/SHA256SUMS.txt) |
 
 使用时不需要 Node.js、Rust 或终端。程序依赖 Microsoft Edge WebView2；电脑缺少该组件时，安装版会联网补装，便携版需要先安装 WebView2 Runtime。日常记录可以离线使用。
 
 Release 下的 `Source code` 是源码压缩包；直接使用请选择上面的 exe 附件。
+
+v0.2.1 修复了切回桌面偶尔不显示的问题：无需额外点击桌面或从日历重新调出组件。
 
 ## 能做什么
 

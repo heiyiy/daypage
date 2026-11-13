@@ -268,6 +268,7 @@ pub fn run() {
         .expect("日页启动失败")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                desktop::stop(app);
                 let state = app.state::<geometry::Geometry>();
                 for label in ["main", "journal"] {
                     if let Some(window) = app.get_webview_window(label) {
