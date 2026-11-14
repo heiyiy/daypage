@@ -29,33 +29,33 @@ async function visible(expected){for(let i=0;i<10;i++){const status=probe('statu
   console.log('Widget focus',probe('widget'));assert.equal((await visible(true)).widgetFocused,true);
   const next=browser.contexts()[0].waitForEvent('page');await invoke('open_journal');const journal=await next;
   await journal.locator('.calendar-day').first().waitFor();
-  await visible(false);
-  if(process.env.DAYPAGE_DESKTOP_QUICK==='1'){
-   probe('winkeyd');await visible(true);
-   await widget.locator('#task-input').fill('');await invoke('quit_app');
-   console.log('PASS: Win+D hit test without clicking desktop.');return;
-  }
+  probe('journal-aside');
+  assert.equal((await visible(true)).journalAboveWidget,true);
+  assert.equal((await visible(true)).topmost,false);
   for(let i=0;i<3;i++){
-   console.log('Desktop cycle without click',i,probe(i%2?'minimize-journal':'desktop'));await visible(true);
-   console.log('Journal cycle',i,probe('journal'));await visible(false);
+    probe('journal-cover');
+    const covered=probe('status');
+    assert.equal(covered.visible,true,'Covering must not hide the widget');
+    assert.equal(covered.hitWidget,false,'Journal must naturally cover the widget');
+    assert.equal(covered.journalAboveWidget,true);
+    assert.equal(covered.topmost,false);
+    probe('journal-aside');await visible(true);
   }
-  probe('journal');await visible(false);
-  console.log('Win+D',probe('winkeyd'));await visible(true);
+  probe('winkeyd');await visible(true);
   assert.equal(await widget.locator('#task-input').inputValue(),'unsaved desktop draft');
-  probe('taskbar');await visible(true);
-  assert.equal((await visible(true)).widgetFocused,false);
   probe('hide-widget');await visible(true);
   probe('minimize-widget');await visible(true);
-  console.log('PASS: taskbar focus and recovery after external hide/minimize without desktop click.');
   await invoke('hide_widget');await visible(false);
-  probe('journal');probe('desktop');await visible(false);
+  await invoke('open_journal');probe('journal-aside');await visible(false);
   await invoke('show_widget');await visible(true);
-  // Re-enabling via tray while another app has focus must not cover that app.
-  probe('journal');await visible(false);await invoke('show_widget');await visible(false);
-  probe('desktop');await visible(true);
+  assert.equal((await visible(true)).journalAboveWidget,true);
+  await invoke('open_journal');probe('journal-cover');
+  await delay(1700);
+  assert.equal(probe('status').hitWidget,false,'Watchdog must not lift widget above a covering app');
+  probe('journal-aside');await visible(true);
   await widget.locator('#task-input').fill('');
   await invoke('quit_app');
-  console.log('PASS: desktop-only visibility, application/journal switching, Win+D and minimize without clicking the desktop, no topmost, draft retention, manual hide and tray re-enable.');
+  console.log('PASS: desktop widget remains visible beside small windows, normal windows cover it, watchdog does not raise it, Win+D restores it, manual hide and drafts persist.');
  }finally{
   if(pid){try{probe('restore');}catch{}}
   if(browser)await browser.close().catch(()=>{});

@@ -35,8 +35,59 @@ let ready = false;
 let busy = false;
 let maintenanceBusy=false;
 let prepareJournal:()=>Promise<void>=async()=>{};
-let rememberedFocus:{id:string;kind:string;start:number;end:number}|null=null;
-function rememberFocus(){const field=document.activeElement as HTMLInputElement;if(field?.dataset.editId)rememberedFocus={id:field.dataset.editId,kind:field.dataset.editKind??"title",start:field.selectionStart??0,end:field.selectionEnd??0};}
+const editorCompositions = new Set<string>();
+const reflectionWrites = new Set<string>();
+let deferredRender = false;
+let pointerEditing = false;
+document.addEventListener("pointerdown", event => {
+  pointerEditing = (event.target as HTMLElement).closest("#task-list,#deleted-list,#backlog-list") !== null;
+});
+function finishPointer() { setTimeout(() => { pointerEditing = false; flushDeferred(); }, 0); }
+document.addEventListener("pointerup", finishPointer);
+document.addEventListener("pointercancel", finishPointer);
+window.addEventListener("blur", finishPointer);
+function editingField() { return document.activeElement?.matches('.task-editor input,.task-editor textarea') ?? false; }
+function flushDeferred() {
+  if (busy || reflectionWrites.size || editorCompositions.size || pointerEditing) return;
+  if (pendingRefresh) { pendingRefresh = false; void load(); }
+  else if (deferredRender && !editingField()) render();
+}
+document.addEventListener("focusout", () => { setTimeout(flushDeferred, 0); });
+function scheduleReflection(id: string) {
+  clearTimeout(reflectionTimers.get(id));
+  if (editorCompositions.has(`reflection-${id}`) || !reflectionDrafts.has(id)) return;
+  reflectionTimers.set(id, setTimeout(() => {
+    reflectionTimers.delete(id);
+    if (busy || maintenanceBusy || reflectionWrites.size) scheduleReflection(id);
+    else void saveReflection(id);
+  }, 500));
+}
+async function saveReflection(id: string) {
+  const task = tasks.find(item => item.id === id);
+  if (!task || !reflectionDrafts.has(id) || editorCompositions.has(`reflection-${id}`)) return;
+  if (busy || maintenanceBusy || reflectionWrites.size) { scheduleReflection(id); return; }
+  clearTimeout(reflectionTimers.get(id)); reflectionTimers.delete(id);
+  const snapshot = reflectionDrafts.get(id)!;
+  reflectionWrites.add(id);
+  controls();
+  status.textContent = "保存中…"; status.className = "";
+  let saved = false;
+  try {
+    tasks = await invoke<DayTask[]>("edit_entry", { id, version: task.version, action: "reflection", title: snapshot });
+    if (reflectionDrafts.get(id) === snapshot && !editorCompositions.has(`reflection-${id}`)) reflectionDrafts.delete(id);
+    saved = true;
+    status.textContent = "已保存"; retry.hidden = true;
+    // Keep the active editor attached and enabled, including while the write was in flight.
+    deferredRender = true;
+    pendingRefresh = true;
+  } catch (error) { fail(error); }
+  finally {
+    reflectionWrites.delete(id);
+    controls();
+    if (saved && reflectionDrafts.has(id)) scheduleReflection(id);
+    flushDeferred();
+  }
+}
 let pendingRefresh = false;
 let readOnly = false;
 let composing = false;
@@ -50,19 +101,19 @@ function showDate() {
 }
 function controls() {
   input.disabled = !ready || busy || maintenanceBusy || readOnly;
-  add.disabled = !ready || busy || maintenanceBusy || readOnly;
+  add.disabled = !ready || busy || reflectionWrites.size > 0 || maintenanceBusy || readOnly;
   $("add-form").hidden = readOnly;
   retry.toggleAttribute("disabled", busy);
-  $<HTMLButtonElement>("undo").disabled = busy || maintenanceBusy || !ready || readOnly || !undoLabel;
-  list.querySelectorAll<HTMLInputElement>("input,textarea").forEach(el => { el.disabled = busy || maintenanceBusy || readOnly; });
-  document.querySelectorAll<HTMLButtonElement>(".entry-action").forEach(el => { el.disabled = busy || maintenanceBusy || readOnly || el.dataset.boundary === "true"; });
+  $<HTMLButtonElement>("undo").disabled = busy || maintenanceBusy || !ready || reflectionWrites.size > 0 || readOnly || !undoLabel;
+  list.querySelectorAll<HTMLInputElement>("input,textarea").forEach(el => {
+    const editor = el.closest(".task-editor");
+    el.disabled = maintenanceBusy || readOnly || (editor ? busy && !editingField() : busy || reflectionWrites.size > 0);
+  });
+  document.querySelectorAll<HTMLButtonElement>(".entry-action").forEach(el => { el.disabled = busy || reflectionWrites.size > 0 || maintenanceBusy || readOnly || el.dataset.boundary === "true"; });
 }
 function render() {
-  const focused = document.activeElement as HTMLInputElement | null;
-  const focusId = rememberedFocus?.id ?? focused?.dataset.editId;
-  const focusKind = rememberedFocus?.kind ?? focused?.dataset.editKind ?? "title";
-  const selection = focusId ? [rememberedFocus?.start ?? focused?.selectionStart ?? 0, rememberedFocus?.end ?? focused?.selectionEnd ?? 0] : null;
-  rememberedFocus=null;
+  if (editingField() || editorCompositions.size || reflectionWrites.size || pointerEditing) { deferredRender = true; controls(); return; }
+  deferredRender = false;
   list.replaceChildren();
   for (const [index, task] of tasks.entries()) {
     const row = document.createElement("li");
@@ -100,8 +151,8 @@ function render() {
       };
       const save = () => { void edit(task,"rename",field.value); };
       let editingComposition = false, editingCompositionEnd = -Infinity;
-      field.addEventListener("compositionstart",()=>{editingComposition=true;});
-      field.addEventListener("compositionend",()=>{editingComposition=false;editingCompositionEnd=performance.now();});
+      field.addEventListener("compositionstart",()=>{editingComposition=true;editorCompositions.add(field.id);});
+      field.addEventListener("compositionend",()=>{editingComposition=false;editingCompositionEnd=performance.now();editorCompositions.delete(field.id);flushDeferred();});
       field.addEventListener("keydown", event => {
         if (event.key === "Enter") {
           event.preventDefault();
@@ -116,20 +167,30 @@ function render() {
       const reflection=document.createElement("textarea");reflection.id=`reflection-${task.id}`;reflection.className="reflection-input";
       reflection.dataset.editId=task.id;reflection.dataset.editKind="reflection";reflection.maxLength=10000;reflection.setAttribute("aria-label","事项反思");reflection.placeholder="事项反思（自动保存）";
       reflection.value=reflectionDrafts.get(task.id)??task.reflection;
-      const saveReflection=()=>{const current=tasks.find(item=>item.id===task.id);if(current&&reflectionDrafts.has(task.id))void edit(current,"reflection",reflectionDrafts.get(task.id));};
-      const schedule=()=>{clearTimeout(reflectionTimers.get(task.id));reflectionTimers.set(task.id,setTimeout(()=>{reflectionTimers.delete(task.id);if(busy)schedule();else saveReflection();},500));};
-      reflection.addEventListener("input",()=>{reflectionDrafts.set(task.id,reflection.value);schedule();});
+      const saveCurrentReflection = () => { void saveReflection(task.id); };
+      reflection.addEventListener("compositionstart", () => {
+        editorCompositions.add(reflection.id); clearTimeout(reflectionTimers.get(task.id));
+      });
+      reflection.addEventListener("compositionend", () => {
+        editorCompositions.delete(reflection.id);
+        reflectionDrafts.set(task.id, reflection.value);
+        scheduleReflection(task.id); flushDeferred();
+      });
+      reflection.addEventListener("input", () => {
+        reflectionDrafts.set(task.id, reflection.value); scheduleReflection(task.id);
+      });
       editor.append(actions,reflection);
-      const saveReflectionButton=document.createElement("button");saveReflectionButton.type="button";saveReflectionButton.className="entry-action save-reflection";saveReflectionButton.textContent="保存反思";saveReflectionButton.addEventListener("click",saveReflection);editor.append(saveReflectionButton);
+      const saveReflectionButton=document.createElement("button");saveReflectionButton.type="button";saveReflectionButton.className="entry-action save-reflection";saveReflectionButton.textContent="保存反思";saveReflectionButton.addEventListener("click",saveCurrentReflection);editor.append(saveReflectionButton);
       row.append(editor);
     }
     checkbox.addEventListener("change", () => {
       const completed = checkbox.checked;
       checkbox.checked = task.completed;
       void mutate(async () => {
-        await invoke("set_completed", { id: task.id, completed, version: task.version });
-        task.completed = completed;
-        task.version += 1;
+        const current = tasks.find(item => item.id === task.id)!;
+        await invoke("set_completed", { id: task.id, completed, version: current.version });
+        current.completed = completed;
+        current.version += 1;
       });
     });
     list.append(row);
@@ -159,14 +220,12 @@ function render() {
   $("progress").textContent = tasks.length ? `${done}/${tasks.length}` : "";
   $("empty-state").hidden = tasks.length > 0;
   controls();
-  if (focusId && selection) {
-    const field=document.getElementById(`${focusKind}-${focusId}`) as HTMLInputElement | null;
-    if (field && !field.disabled) { field.focus({preventScroll:true}); field.setSelectionRange(selection[0],selection[1]); }
-  }
+
 }
 async function edit(task:DayTask, action:string, title?:string) {
   await mutate(async()=>{
-    tasks=await invoke<DayTask[]>("edit_entry",{id:task.id,version:task.version,action,title:title??null});
+    const current = [...tasks,...deleted].find(item => item.id === task.id) ?? task;
+    tasks=await invoke<DayTask[]>("edit_entry",{id:task.id,version:current.version,action,title:title??null});
     if (action==="rename"||action==="delete") titleDrafts.delete(task.id);
     if (action==="reflection"||action==="delete") {reflectionDrafts.delete(task.id);clearTimeout(reflectionTimers.get(task.id));}
     if (action==="delete") expandedTaskId=null;
@@ -185,16 +244,15 @@ async function readTasks() {
   $("backup-warning").hidden=!meta.backup_error;$("backup-warning").textContent=meta.backup_error?`本地数据已保存；自动备份失败：${meta.backup_error}`:"";
 }
 async function load() {
-  if (busy) { pendingRefresh = true; return; }
-  rememberFocus();
+  if (busy || reflectionWrites.size) { pendingRefresh = true; return; }
   busy = true;
-  controls();
+  if (!ready) controls();
   try {
     await readTasks();
     ready = true;
-    status.textContent = "本地已保存";
-    status.className = "";
-    retry.hidden = true;
+    if (!reflectionDrafts.size) {
+      status.textContent = "本地已保存"; status.className = ""; retry.hidden = true;
+    }
   } catch (error) { fail(error); }
   finally {
     busy = false; render();
@@ -202,8 +260,7 @@ async function load() {
   }
 }
 async function mutate(action: () => Promise<void>) {
-  if (busy || maintenanceBusy || !ready || readOnly) return;
-  rememberFocus();
+  if (busy || reflectionWrites.size || maintenanceBusy || !ready || readOnly) return;
   busy = true;
   controls();
   status.textContent = "保存中…";
@@ -252,7 +309,8 @@ async function selectDate(next: string, editable: boolean) {
   await load();
 }
 function assertTasksSaved() {
-  if (busy) throw new Error("待办正在保存，请稍后操作");
+  if (busy || reflectionWrites.size) throw new Error("待办正在保存，请稍后操作");
+  if (editorCompositions.size) throw new Error("请先完成中文输入，再执行操作");
   if (reflectionDrafts.size) throw new Error("请先等待事项反思保存，失败时可点击保存反思重试或取消");
   if ([...tasks,...deleted].some(task=>titleDrafts.has(task.id)&&titleDrafts.get(task.id)!==task.title)) throw new Error("请先保存或取消待办标题修改");
 }

@@ -1,5 +1,5 @@
-//! Desktop visibility follows visible application windows, not desktop keyboard focus.
-//! WinEvents provide fast updates; a 750 ms watchdog repairs missed shell transitions.
+//! Keep the widget above the desktop shell and below ordinary application windows.
+//! Do not hide it when applications open or move its z-order while the user is typing.
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tauri::Manager;
 
@@ -65,11 +65,24 @@ mod native {
 
     struct Scan {
         widget: HWND,
-        application: bool,
+        seen_widget: bool,
+        app_below: bool,
+        lowest_application: HWND,
+        foreground_desktop: HWND,
+        desktop_seen: bool,
     }
     unsafe extern "system" fn candidate(hwnd: HWND, data: LPARAM) -> i32 {
         let scan = unsafe { &mut *(data as *mut Scan) };
+        if hwnd == scan.foreground_desktop {
+            scan.desktop_seen = true;
+        }
         if hwnd == scan.widget {
+            scan.seen_widget = true;
+            return 1;
+        }
+        // Show Desktop can leave restored application HWNDs below the active desktop band.
+        // They are not actually on the exposed desktop yet and must not sink the widget below it.
+        if scan.desktop_seen && !scan.foreground_desktop.is_null() {
             return 1;
         }
         unsafe {
@@ -100,20 +113,63 @@ mod native {
                 return 1;
             }
         }
-        scan.application = true;
-        0
+        scan.lowest_application = hwnd;
+        scan.app_below |= scan.seen_widget;
+        1
     }
 
-    pub fn application_visible(widget: HWND) -> bool {
+    pub fn place_on_desktop(widget: HWND) {
+        let foreground = unsafe { GetAncestor(GetForegroundWindow(), GA_ROOT) };
+        let desktop = matches!(
+            unsafe { class(foreground) }.as_str(),
+            "Progman" | "WorkerW" | "ApplicationManager_DesktopShellWindow"
+        );
         let mut scan = Scan {
             widget,
-            application: false,
+            seen_widget: false,
+            app_below: false,
+            lowest_application: std::ptr::null_mut(),
+            foreground_desktop: if desktop {
+                foreground
+            } else {
+                std::ptr::null_mut()
+            },
+            desktop_seen: false,
         };
-        // Stopping at the first application and enumeration failure both return zero.
-        // On failure, keep the widget hidden instead of covering an unknown application.
-        let enumerated =
-            unsafe { EnumWindows(Some(candidate), (&mut scan as *mut Scan) as LPARAM) };
-        scan.application || enumerated == 0
+        unsafe {
+            if EnumWindows(Some(candidate), (&mut scan as *mut Scan) as LPARAM) == 0 {
+                return;
+            }
+            let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+            if !scan.lowest_application.is_null() {
+                // Only lower when needed: leave an active IME/editor completely alone otherwise.
+                if scan.app_below
+                    || GetWindowLongPtrW(widget, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST != 0
+                {
+                    SetWindowPos(widget, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+                    SetWindowPos(widget, scan.lowest_application, 0, 0, 0, 0, flags);
+                }
+                return;
+            }
+            if GetAncestor(GetForegroundWindow(), GA_ROOT) == widget {
+                return;
+            }
+            // Win+D can put the shell in front without hiding or minimizing this window.
+            // Repair only that case, never repeatedly pulse the z-order of an idle editor.
+            let mut rect = std::mem::zeroed();
+            if GetWindowRect(widget, &mut rect) == 0 {
+                return;
+            }
+            let point = windows_sys::Win32::Foundation::POINT {
+                x: rect.left + 30,
+                y: rect.top + 30,
+            };
+            let covering = GetAncestor(WindowFromPoint(point), GA_ROOT);
+            if shell(&class(covering)) {
+                SetWindowPos(widget, HWND_TOPMOST, 0, 0, 0, 0, flags);
+                SetWindowPos(widget, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+            }
+        }
     }
 }
 
@@ -125,36 +181,15 @@ fn refresh(app: &tauri::AppHandle) {
     };
     let Ok(hwnd) = window.hwnd() else { return };
     unsafe {
-        let focused = GetAncestor(GetForegroundWindow(), GA_ROOT) == hwnd.0;
-        let wanted = !app.state::<Desktop>().hidden.load(Ordering::Relaxed)
-            && (focused || !native::application_visible(hwnd.0));
-        if wanted {
+        if app.state::<Desktop>().hidden.load(Ordering::Relaxed) {
+            if IsWindowVisible(hwnd.0) != 0 {
+                ShowWindow(hwnd.0, SW_HIDE);
+            }
+        } else {
             if IsWindowVisible(hwnd.0) == 0 || IsIconic(hwnd.0) != 0 {
                 ShowWindow(hwnd.0, SW_SHOWNOACTIVATE);
             }
-            // Show Desktop can leave a visible, non-minimized window behind the shell.
-            // Pulse the z-order to escape the shell Show Desktop band, then immediately
-            // return to normal stacking. Never activate or leave the widget topmost.
-            SetWindowPos(
-                hwnd.0,
-                HWND_TOPMOST,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
-            SetWindowPos(
-                hwnd.0,
-                HWND_NOTOPMOST,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
-        } else if IsWindowVisible(hwnd.0) != 0 {
-            ShowWindow(hwnd.0, SW_HIDE);
+            native::place_on_desktop(hwnd.0);
         }
     }
 }

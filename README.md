@@ -6,23 +6,23 @@
 
 ## 下载
 
-**[下载最新版本](https://github.com/heiyiy/daypage/releases/latest)** · 当前版本 **v0.2.1** · Windows x64
+**[下载最新版本](https://github.com/heiyiy/daypage/releases/latest)** · 当前版本 **v0.2.2** · Windows x64
 
 | 文件 | 适合谁 | 下载 |
 | --- | --- | --- |
-| 安装版 | 日常使用，安装后从开始菜单打开 | [下载安装包](https://github.com/heiyiy/daypage/releases/download/v0.2.1/Daypage-0.2.1-windows-x64-setup.exe) |
-| 便携版 | 不想安装，双击即可运行 | [下载 exe](https://github.com/heiyiy/daypage/releases/download/v0.2.1/Daypage-0.2.1-windows-x64.exe) |
-| 校验文件 | 核对下载文件的 SHA256 | [SHA256SUMS.txt](https://github.com/heiyiy/daypage/releases/download/v0.2.1/SHA256SUMS.txt) |
+| 安装版 | 日常使用，安装后从开始菜单打开 | [下载安装包](https://github.com/heiyiy/daypage/releases/download/v0.2.2/Daypage-0.2.2-windows-x64-setup.exe) |
+| 便携版 | 不想安装，双击即可运行 | [下载 exe](https://github.com/heiyiy/daypage/releases/download/v0.2.2/Daypage-0.2.2-windows-x64.exe) |
+| 校验文件 | 核对下载文件的 SHA256 | [SHA256SUMS.txt](https://github.com/heiyiy/daypage/releases/download/v0.2.2/SHA256SUMS.txt) |
 
 使用时不需要 Node.js、Rust 或终端。程序依赖 Microsoft Edge WebView2；电脑缺少该组件时，安装版会联网补装，便携版需要先安装 WebView2 Runtime。日常记录可以离线使用。
 
 Release 下的 `Source code` 是源码压缩包；直接使用请选择上面的 exe 附件。
 
-v0.2.1 修复了切回桌面偶尔不显示的问题：无需额外点击桌面或从日历重新调出组件。
+v0.2.2 修复事项反思自动保存打断中文组词的问题；组件现在持续位于桌面底层，打开小窗口时仍显示未被遮住的部分。
 
 ## 能做什么
 
-- **桌面待办**：只在 Windows 桌面显示，切换到其他应用时自动隐藏，回到桌面时恢复；支持拖动、缩放和托盘隐藏。
+- **桌面待办**：持续留在桌面底层，普通应用窗口自然遮挡它，打开小窗口时未被遮住的部分仍可见；支持拖动、缩放和托盘隐藏。
 - **简洁外观**：原色、白底黑字、黑底白字，三档背景透明度，待办文字加粗。
 - **事项管理**：新增、编辑、排序、完成、删除与恢复；每件事都可以写反思，未完成事项可以安排到今天。
 - **日历与日记**：一个月一页，日期格预览当天待办，展开查看完整安排、事项反思和日记；历史内容默认只读，可以主动编辑。
@@ -36,7 +36,7 @@ v0.2.1 修复了切回桌面偶尔不显示的问题：无需额外点击桌面�
 3. 点击“日历”，打开独立页面，查看其他日期或写当天日记。
 4. 在日历右上角“设置”中配置开机启动、备份目录、恢复和导出。
 
-打开其他应用（包括日页的日历窗口）时，待办组件会隐藏；回到桌面或按 `Win+D` 时重新显示。自动隐藏不会清空正在输入的文字。
+待办组件保持在普通应用窗口下方。打开小窗口时，未被遮住的部分仍然可见；最大化或移动窗口覆盖它时，组件会自然被遮挡。移开窗口或回到桌面后，无需再从日历调出。
 
 组件的 `×` 是手动隐藏，此后回到桌面也不会自动出现。从系统托盘右键菜单选择“待办”，可以重新启用桌面显示；选择“退出”才会结束程序。
 

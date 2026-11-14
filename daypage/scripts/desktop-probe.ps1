@@ -1,4 +1,4 @@
-﻿param([int]$AppPid,[ValidateSet('status','desktop','journal','widget','restore','winkeyd','minimize-journal','hide-widget','minimize-widget','taskbar','inventory')][string]$Action='status')
+﻿param([int]$AppPid,[ValidateSet('status','desktop','journal','widget','restore','winkeyd','minimize-journal','hide-widget','minimize-widget','taskbar','inventory','journal-aside','journal-cover')][string]$Action='status')
 $ErrorActionPreference='Stop'
 Add-Type @'
 using System;using System.Text;using System.Runtime.InteropServices;
@@ -32,6 +32,9 @@ public static class DesktopProbe {
  static bool HitWidget(IntPtr h){Rect r;GetWindowRect(h,out r);return GetAncestor(WindowFromPoint(new Point{X=r.Left+25,Y=r.Top+70}),2)==h;}
  [StructLayout(LayoutKind.Sequential)] struct Rect { public int Left,Top,Right,Bottom; }
  [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h,out Rect r);
+ [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr h,IntPtr after,int x,int y,int width,int height,uint flags);
+ public static void ArrangeJournal(int pid,bool cover){var main=Find(pid,false);var journal=Find(pid,true);Rect r;GetWindowRect(main,out r);SetWindowPos(main,IntPtr.Zero,40,80,r.Right-r.Left,r.Bottom-r.Top,0x14);ShowWindow(journal,9);SetWindowPos(journal,IntPtr.Zero,cover?40:440,80,760,500,0x10);}
+ static bool JournalAbove(int pid){var main=Find(pid,false);var journal=Find(pid,true);bool seen=false,result=false;EnumWindows((h,p)=>{if(h==journal)seen=true;if(h==main){result=seen;return false;}return true;},IntPtr.Zero);return result;}
  [DllImport("user32.dll")] static extern bool SetCursorPos(int x,int y);
  [DllImport("user32.dll")] static extern void mouse_event(uint flags,uint x,uint y,uint data,UIntPtr extra);
  public static void Focus(int pid,bool journal){var h=Find(pid,journal);if(journal)FocusHandle(h);Rect r;GetWindowRect(h,out r);SetCursorPos(r.Left+25,r.Top+70);mouse_event(2,0,0,0,UIntPtr.Zero);mouse_event(4,0,0,0,UIntPtr.Zero);}
@@ -39,7 +42,7 @@ public static class DesktopProbe {
  [DllImport("user32.dll")] static extern bool ShowWindowAsync(IntPtr h,int mode);
  public static void MinimizeApplications(){EnumWindows((h,p)=>{if(IsWindowVisible(h)&&!IsIconic(h)&&Cloaked(h)==0&&(GetWindowLong(h,-16)&0xC00000)!=0&&(GetWindowLong(h,-20)&0x80)==0)ShowWindowAsync(h,6);return true;},IntPtr.Zero);}
  public static void Inventory(){EnumWindows((h,p)=>{if(IsWindowVisible(h)){var c=new StringBuilder(256);GetClassName(h,c,256);uint owner;GetWindowThreadProcessId(h,out owner);Console.WriteLine(c+" iconic="+IsIconic(h)+" cloaked="+Cloaked(h)+" titleLength="+GetWindowTextLength(h)+" style="+GetWindowLong(h,-16).ToString("X")+" ex="+GetWindowLong(h,-20).ToString("X")+" pid="+owner);}return true;},IntPtr.Zero);}
- public static string Status(int pid){var h=Find(pid,false);var f=GetForegroundWindow();var name=new StringBuilder(256);GetClassName(f,name,256);return "{\"hitWidget\":"+(HitWidget(h)?"true":"false")+",\"minimized\":"+(IsIconic(h)?"true":"false")+",\"cloaked\":"+Cloaked(h)+",\"visible\":"+(IsWindowVisible(h)?"true":"false")+",\"topmost\":"+((GetWindowLong(h,-20)&8)!=0?"true":"false")+",\"widgetFocused\":"+(h==f?"true":"false")+",\"foregroundClass\":\""+name+"\"}";}
+ public static string Status(int pid){var h=Find(pid,false);var f=GetForegroundWindow();var name=new StringBuilder(256);GetClassName(f,name,256);return "{\"journalAboveWidget\":"+(JournalAbove(pid)?"true":"false")+",\"hitWidget\":"+(HitWidget(h)?"true":"false")+",\"minimized\":"+(IsIconic(h)?"true":"false")+",\"cloaked\":"+Cloaked(h)+",\"visible\":"+(IsWindowVisible(h)?"true":"false")+",\"topmost\":"+((GetWindowLong(h,-20)&8)!=0?"true":"false")+",\"widgetFocused\":"+(h==f?"true":"false")+",\"foregroundClass\":\""+name+"\"}";}
 }
 '@
 switch($Action){
@@ -49,6 +52,8 @@ switch($Action){
  'hide-widget' {[DesktopProbe]::HideWidget($AppPid); Start-Sleep -Milliseconds 50}
  'minimize-widget' {[DesktopProbe]::Minimize($AppPid,$false); Start-Sleep -Milliseconds 50}
  'taskbar' {[DesktopProbe]::FocusTaskbar(); Start-Sleep -Milliseconds 300}
+ 'journal-aside' {[DesktopProbe]::ArrangeJournal($AppPid,$false); [DesktopProbe]::Focus($AppPid,$true); Start-Sleep -Milliseconds 900}
+ 'journal-cover' {[DesktopProbe]::ArrangeJournal($AppPid,$true); [DesktopProbe]::Focus($AppPid,$true); Start-Sleep -Milliseconds 900}
  'inventory' {[DesktopProbe]::Inventory()}
  'restore' {(New-Object -ComObject Shell.Application).UndoMinimizeAll(); Start-Sleep -Milliseconds 200}
  'journal' {[DesktopProbe]::Focus($AppPid,$true); Start-Sleep -Milliseconds 300}
